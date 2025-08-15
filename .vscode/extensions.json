@@ -1,0 +1,4 @@
+{
+  "recommendations": ["davidanson.vscode-markdownlint", "biomejs.biome"],
+  "unwantedRecommendations": []
+}

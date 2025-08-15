@@ -1,0 +1,85 @@
+{
+  "name": "portico",
+  "version": "0.0.0-development",
+  "type": "module",
+  "description": "Generate stable, unique development ports for microfrontends based on package name",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "bin": {
+    "portico": "./dist/cli.mjs"
+  },
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly && cp dist/index.d.ts dist/index.d.cts",
+    "dev": "vite build --watch",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "npm run build && biome check . && vitest run",
+    "publint": "publint --strict",
+    "prepare": "lefthook install",
+    "validate": "npm run check && npm run publint",
+    "prepublishOnly": "npm run validate"
+  },
+  "keywords": [
+    "port",
+    "microfrontend",
+    "development",
+    "webpack",
+    "angular",
+    "react",
+    "vue",
+    "devserver"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "commander": "^9.4.1"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manbearwiz/portico.git"
+  },
+  "bugs": {
+    "url": "https://github.com/manbearwiz/portico/issues"
+  },
+  "homepage": "https://github.com/manbearwiz/portico#readme",
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.4",
+    "@semantic-release/npm": "^12.0.2",
+    "@tsconfig/node18": "^18.2.4",
+    "@types/node": "^24.3.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "lefthook": "^1.12.3",
+    "publint": "^0.3.12",
+    "semantic-release": "^24.2.7",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.2",
+    "vite-node": "^3.2.4",
+    "vitest": "^3.2.4"
+  }
+}

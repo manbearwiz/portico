@@ -1,0 +1,52 @@
+# Lefthook configuration for commit validation
+# See: https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: "*.{js,ts,json}"
+      run: npm run lint
+      stage_fixed: true
+    
+    format:
+      glob: "*.{js,ts,json}"
+      run: npm run format
+      stage_fixed: true
+    
+    build:
+      glob: "src/**/*.ts"
+      run: npm run build
+    
+    test:
+      run: npm test
+    
+    publint:
+      run: npx publint --strict
+    
+    package-sync:
+      glob: "package*.json"
+      run: npm ls --depth=0 --silent
+      fail_text: "Package.json and package-lock.json are out of sync. Run 'npm install' to fix."
+
+pre-push:
+  commands:
+    check-all:
+      run: npm run check
+    
+    publint-strict:
+      run: npx publint --strict
+
+commit-msg:
+  commands:
+    check-conventional:
+      run: |
+        # Basic conventional commit format validation
+        if ! grep -qE "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: .{1,50}" "$1"; then
+          echo "❌ Commit message must follow conventional commit format:"
+          echo "   type(scope): description"
+          echo ""
+          echo "   Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert"
+          echo "   Example: feat(cli): add port calculation for scoped packages"
+          exit 1
+        fi

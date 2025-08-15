@@ -1,0 +1,9 @@
+{
+  "name": "example-microfrontend-shell",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "ng serve --port=$(npx portico)",
+    "dev": "ng serve --port=$(npx portico) --host=0.0.0.0",
+    "dev:custom": "ng serve --port=$(npx portico --base 5000 --range 100)"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "example-microfrontend-auth",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "PORT=$(npx portico) react-scripts start",
+    "dev": "PORT=$(npx portico --base 3000) react-scripts start"
+  }
+}
