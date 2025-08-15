@@ -73,7 +73,9 @@ apps.forEach((app) => {
 });
 
 console.log('');
-console.log('✅ All ports are deterministic and collision-free within their ranges!');
+console.log(
+  '✅ All ports are deterministic and collision-free within their ranges!',
+);
 
 module.exports = {
   getAngularPort,

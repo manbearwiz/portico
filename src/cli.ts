@@ -12,10 +12,15 @@ interface Options {
 
 program
   .name('portico')
-  .description('Generate stable, unique development ports based on package name')
+  .description(
+    'Generate stable, unique development ports based on package name',
+  )
   .option('-b, --base <port>', 'Base port number (default: 4200)', '4200')
   .option('-r, --range <range>', 'Port range size (default: 200)', '200')
-  .option('-p, --package <path>', 'Path to package.json (default: ./package.json)')
+  .option(
+    '-p, --package <path>',
+    'Path to package.json (default: ./package.json)',
+  )
   .option('-n, --name <name>', 'Package name to calculate port for')
   .action((options: Options) => {
     try {
@@ -34,7 +39,8 @@ program
 
       console.log(port);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       console.error(`Error: ${errorMessage}`);
       process.exit(1);
     }

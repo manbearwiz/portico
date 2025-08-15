@@ -14,7 +14,11 @@ export interface PackageData {
  * @param range - The range of ports to use (default: 200)
  * @returns A stable port number for the given package name
  */
-export function getPort(packageName: string, basePort = 4200, range = 200): number {
+export function getPort(
+  packageName: string,
+  basePort = 4200,
+  range = 200,
+): number {
   if (!packageName || typeof packageName !== 'string') {
     throw new Error('Package name must be a non-empty string');
   }
@@ -49,7 +53,7 @@ export function getPort(packageName: string, basePort = 4200, range = 200): numb
 export function getPortFromPackageJson(
   packageJsonPath?: string,
   basePort = 4200,
-  range = 200
+  range = 200,
 ): number {
   const pkgPath = packageJsonPath || path.join(process.cwd(), 'package.json');
 
@@ -62,7 +66,8 @@ export function getPortFromPackageJson(
     const packageContent = fs.readFileSync(pkgPath, 'utf8');
     packageData = JSON.parse(packageContent) as PackageData;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Failed to parse package.json: ${errorMessage}`);
   }
 

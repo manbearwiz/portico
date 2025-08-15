@@ -30,24 +30,39 @@ describe('portico', () => {
     });
 
     test('should throw error for invalid package name', () => {
-      expect(() => getPort('')).toThrow('Package name must be a non-empty string');
+      expect(() => getPort('')).toThrow(
+        'Package name must be a non-empty string',
+      );
       // @ts-expect-error - Testing invalid input
-      expect(() => getPort(null)).toThrow('Package name must be a non-empty string');
+      expect(() => getPort(null)).toThrow(
+        'Package name must be a non-empty string',
+      );
     });
 
     test('should throw error for invalid base port', () => {
-      expect(() => getPort('test', 100)).toThrow('Base port must be between 1024 and 65535');
-      expect(() => getPort('test', 70000)).toThrow('Base port must be between 1024 and 65535');
+      expect(() => getPort('test', 100)).toThrow(
+        'Base port must be between 1024 and 65535',
+      );
+      expect(() => getPort('test', 70000)).toThrow(
+        'Base port must be between 1024 and 65535',
+      );
     });
 
     test('should throw error for invalid range', () => {
-      expect(() => getPort('test', 4200, 0)).toThrow('Port range must be between 1 and 1000');
-      expect(() => getPort('test', 4200, 1001)).toThrow('Port range must be between 1 and 1000');
+      expect(() => getPort('test', 4200, 0)).toThrow(
+        'Port range must be between 1 and 1000',
+      );
+      expect(() => getPort('test', 4200, 1001)).toThrow(
+        'Port range must be between 1 and 1000',
+      );
     });
   });
 
   describe('getPortFromPackageJson', () => {
-    const testPackageJsonPath = path.join(import.meta.dirname || __dirname, 'test-package.json');
+    const testPackageJsonPath = path.join(
+      import.meta.dirname || __dirname,
+      'test-package.json',
+    );
 
     beforeEach(() => {
       // Clean up any existing test file
@@ -65,7 +80,10 @@ describe('portico', () => {
 
     test('should read package name from package.json and generate port', () => {
       const packageData = { name: 'test-package', version: '1.0.0' };
-      fs.writeFileSync(testPackageJsonPath, JSON.stringify(packageData, null, 2));
+      fs.writeFileSync(
+        testPackageJsonPath,
+        JSON.stringify(packageData, null, 2),
+      );
 
       const port = getPortFromPackageJson(testPackageJsonPath);
       const expectedPort = getPort('test-package');
@@ -74,16 +92,19 @@ describe('portico', () => {
 
     test('should throw error if package.json does not exist', () => {
       expect(() => getPortFromPackageJson('/nonexistent/package.json')).toThrow(
-        'package.json not found'
+        'package.json not found',
       );
     });
 
     test('should throw error if package.json has no name field', () => {
       const packageData = { version: '1.0.0' };
-      fs.writeFileSync(testPackageJsonPath, JSON.stringify(packageData, null, 2));
+      fs.writeFileSync(
+        testPackageJsonPath,
+        JSON.stringify(packageData, null, 2),
+      );
 
       expect(() => getPortFromPackageJson(testPackageJsonPath)).toThrow(
-        'package.json must have a "name" field'
+        'package.json must have a "name" field',
       );
     });
 
@@ -91,7 +112,7 @@ describe('portico', () => {
       fs.writeFileSync(testPackageJsonPath, '{ invalid json }');
 
       expect(() => getPortFromPackageJson(testPackageJsonPath)).toThrow(
-        'Failed to parse package.json'
+        'Failed to parse package.json',
       );
     });
   });
