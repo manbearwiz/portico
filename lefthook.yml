@@ -30,17 +30,3 @@ pre-push:
       run: npx @biomejs/biome check --no-errors-on-unmatched --files-ignore-unknown=true .
     publint:
       run: npm run build && npx --yes publint
-
-commit-msg:
-  commands:
-    check-conventional:
-      run: |
-        # Basic conventional commit format validation
-        if ! grep -qE "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: .{1,50}" "$1"; then
-          echo "❌ Commit message must follow conventional commit format:"
-          echo "   type(scope): description"
-          echo ""
-          echo "   Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert"
-          echo "   Example: feat(cli): add port calculation for scoped packages"
-          exit 1
-        fi
