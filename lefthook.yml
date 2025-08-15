@@ -1,41 +1,35 @@
-# Lefthook configuration for commit validation
-# See: https://github.com/evilmartians/lefthook
+output:
+  - failure
 
 pre-commit:
   parallel: true
   commands:
-    lint:
-      glob: "*.{js,ts,json}"
-      run: npm run lint
-      stage_fixed: true
-    
     format:
-      glob: "*.{js,ts,json}"
-      run: npm run format
+      glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
+      run: npx @biomejs/biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
       stage_fixed: true
-    
-    build:
-      glob: "src/**/*.ts"
-      run: npm run build
-    
     test:
-      run: npm test
-    
-    publint:
-      run: npx publint --strict
-    
+      glob: "*.ts"
+      run: npx vitest related --reporter=vitest-tiny-reporter --run {staged_files}
+      fail_text: "Tests failed"
+      env:
+        TERM: dumb
+
     package-sync:
       glob: "package*.json"
       run: npm ls --depth=0 --silent
       fail_text: "Package.json and package-lock.json are out of sync. Run 'npm install' to fix."
 
 pre-push:
+  parallel: true
   commands:
-    check-all:
-      run: npm run check
-    
-    publint-strict:
-      run: npx publint --strict
+    test:
+      run: npx vitest --run --coverage --reporter=vitest-tiny-reporter
+      fail_text: "Tests failed"
+    check-format:
+      run: npx @biomejs/biome check --no-errors-on-unmatched --files-ignore-unknown=true .
+    publint:
+      run: npm run build && npx --yes publint
 
 commit-msg:
   commands:
