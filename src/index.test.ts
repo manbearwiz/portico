@@ -3,8 +3,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import {
   analyzeImportMap,
+  getPackageName,
   getPort,
-  getPortFromPackageJson,
   HASH,
   type HashFunction,
   REDUCERS,
@@ -310,130 +310,16 @@ describe('portico', () => {
     });
   });
 
-  describe('getPortFromPackageJson', () => {
-    const testPackageJsonPath = path.join(
-      import.meta.dirname || __dirname,
-      'test-package.json',
-    );
-
-    beforeEach(() => {
-      // Clean up any existing test file
-      if (fs.existsSync(testPackageJsonPath)) {
-        fs.unlinkSync(testPackageJsonPath);
-      }
+  describe('getPackageName', () => {
+    test('should return package name from package.json', () => {
+      const packageName = getPackageName();
+      expect(packageName).toBe('portico');
     });
 
-    afterEach(() => {
-      // Clean up test file
-      if (fs.existsSync(testPackageJsonPath)) {
-        fs.unlinkSync(testPackageJsonPath);
-      }
-    });
-
-    test('should read package name from package.json and generate port', () => {
-      const packageData = { name: 'test-package', version: '1.0.0' };
-      fs.writeFileSync(
-        testPackageJsonPath,
-        JSON.stringify(packageData, null, 2),
-      );
-
-      const port = getPortFromPackageJson(testPackageJsonPath);
-      const expectedPort = getPort('test-package');
-      expect(port).toBe(expectedPort);
-    });
-
-    test('should throw error if package.json does not exist', () => {
-      expect(() => getPortFromPackageJson('/nonexistent/package.json')).toThrow(
+    test('should throw error if package.json is not found', () => {
+      expect(() => getPackageName('/nonexistent/package.json')).toThrow(
         'package.json not found',
       );
-    });
-
-    test('should throw error if package.json has no name field', () => {
-      const packageData = { version: '1.0.0' };
-      fs.writeFileSync(
-        testPackageJsonPath,
-        JSON.stringify(packageData, null, 2),
-      );
-
-      expect(() => getPortFromPackageJson(testPackageJsonPath)).toThrow(
-        'package.json must have a "name" field',
-      );
-    });
-
-    test('should throw error if package.json is invalid JSON', () => {
-      fs.writeFileSync(testPackageJsonPath, '{ invalid json }');
-
-      expect(() => getPortFromPackageJson(testPackageJsonPath)).toThrow(
-        'Failed to parse package.json',
-      );
-    });
-
-    test('should work with custom hash and reducer', () => {
-      const packageData = { name: 'custom-test', version: '1.0.0' };
-      fs.writeFileSync(
-        testPackageJsonPath,
-        JSON.stringify(packageData, null, 2),
-      );
-
-      const port1 = getPortFromPackageJson(
-        testPackageJsonPath,
-        3001,
-        1997,
-        'double',
-        'lcg',
-      );
-      const port2 = getPortFromPackageJson(
-        testPackageJsonPath,
-        3001,
-        1997,
-        'safe',
-        'modulo',
-      );
-
-      expect(port1).toBeGreaterThanOrEqual(3001);
-      expect(port1).toBeLessThan(4998);
-      expect(port2).toBeGreaterThanOrEqual(3001);
-      expect(port2).toBeLessThan(4998);
-
-      // Should get different results with different algorithms
-      expect(port1).not.toBe(port2);
-    });
-
-    test('should use default parameters when not specified', () => {
-      const packageData = { name: 'default-params-test', version: '1.0.0' };
-      fs.writeFileSync(
-        testPackageJsonPath,
-        JSON.stringify(packageData, null, 2),
-      );
-
-      const defaultPort = getPortFromPackageJson(testPackageJsonPath);
-      const explicitPort = getPortFromPackageJson(
-        testPackageJsonPath,
-        3001,
-        1997,
-        'twin',
-        'knuth',
-      );
-
-      expect(defaultPort).toBe(explicitPort);
-    });
-
-    test('should handle package.json with extra fields', () => {
-      const packageData = {
-        name: 'extra-fields-test',
-        version: '1.0.0',
-        description: 'Test package',
-        scripts: { start: 'node index.js' },
-        dependencies: { lodash: '^4.0.0' },
-      };
-      fs.writeFileSync(
-        testPackageJsonPath,
-        JSON.stringify(packageData, null, 2),
-      );
-
-      const port = getPortFromPackageJson(testPackageJsonPath);
-      expect(port).toBeGreaterThanOrEqual(3001);
-      expect(port).toBeLessThan(4998);
     });
   });
 

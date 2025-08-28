@@ -55,14 +55,12 @@ for (const importMap of importMaps) {
       const results = benchmarkData.results.map((result) => ({
         strategy: `${result.hash}_${result.reducer}`,
         collisions: result.collisions,
-        utilization: result.utilization,
       }));
 
       if (results.length > 0) {
         // Award points: properly handle ties by grouping identical performance
         const totalStrategies = results.length;
 
-        // Group results by performance (collisions, then utilization)
         const performanceGroups = [];
         let currentGroup = [results[0]];
 
@@ -71,10 +69,7 @@ for (const importMap of importMaps) {
           const previous = results[i - 1];
 
           // Check if this result ties with the previous one
-          if (
-            current.collisions === previous.collisions &&
-            current.utilization === previous.utilization
-          ) {
+          if (current.collisions === previous.collisions) {
             currentGroup.push(current);
           } else {
             performanceGroups.push(currentGroup);
@@ -136,7 +131,6 @@ for (const importMap of importMaps) {
               test: `${importMap.name} (range=${range})`,
               rank: rank,
               collisions: result.collisions,
-              utilization: result.utilization,
               points: points,
             });
 

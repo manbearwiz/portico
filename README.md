@@ -35,6 +35,32 @@ Portico generates **deterministic ports** by hashing the package name and applyi
 - ✅ Works in isolated development environments
 - ✅ Portable across repos and machines
 
+## 🎂 Collision Probability
+
+Assigning unique ports from a limited range means that collisions (two different microfrontends hashing to the same port) are more likely than you might think. This concept is closely related to the **[Birthday Problem](https://en.wikipedia.org/wiki/Birthday_problem)** in mathematics.
+
+The probability of at least one collision occurring can be estimated with the following formula:
+
+$$ P(\text{collision}) \approx 1 - e^{-k^2 / (2N)} $$
+
+Where:
+
+- **`k`** is the number of microfrontends.
+- **`N`** is the size of the port range (set with `--range`).
+
+The table below shows the approximate probability of at least one collision based on the number of microfrontends and the port range size.
+
+| \# of Microfrontends (k) | Range=997 | Range=1997 (Default) | Range=5000 |
+| :----------------------- | :-------- | :------------------- | :--------- |
+| **10**                   | 2.5%      | 1.2%                 | 0.5%       |
+| **20**                   | 9.5%      | 4.9%                 | 2.0%       |
+| **30**                   | 20.2%     | 10.5%                | 4.4%       |
+| **50**                   | 46.5%     | 27.1%                | 11.8%      |
+| **75**                   | 75.6%     | 51.1%                | 25.4%      |
+| **100**                  | 91.8%     | 71.4%                | 39.4%      |
+
+The **default range of 1997 offers a reasonably low collision chance** for typical projects. If you have a very large number of microfrontends, you can decrease the probability of collision by increasing the range with the `--range` flag.
+
 ## 📖 Usage
 
 ### CLI Usage
@@ -259,3 +285,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 Made with ❤️ for microfrontend developers
+
+```
+
+```

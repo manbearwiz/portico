@@ -3,10 +3,11 @@
 import { Command } from 'commander';
 import {
   analyzeImportMap,
+  getPackageName,
   getPort,
-  getPortFromPackageJson,
   HASH,
   type HashFunction,
+  parseImportMap,
   REDUCERS,
   type ReducerFunction,
 } from './index.js';
@@ -52,22 +53,8 @@ program
       const range = parseInt(options.range, 10);
       const hash = options.hash as HashFunction;
       const reducer = options.reducer as ReducerFunction;
-
-      let port: number;
-
-      if (options.name) {
-        // Use provided package name
-        port = getPort(options.name, basePort, range, hash, reducer);
-      } else {
-        // Use package.json (with optional custom path)
-        port = getPortFromPackageJson(
-          options.package,
-          basePort,
-          range,
-          hash,
-          reducer,
-        );
-      }
+      const name = options.name ?? getPackageName(options.package);
+      const port = getPort(name, basePort, range, hash, reducer);
 
       console.log(port);
     } catch (error) {
@@ -138,16 +125,24 @@ program
           );
           const packageCount = Object.keys(analysis.entries).length;
           const uniquePortCount = Object.keys(analysis.ports).length;
+          const collisionProbability =
+            1 - Math.exp((-packageCount * packageCount) / (2 * range));
 
           console.log('\n📊 Import Map Port Analysis\n');
-          console.log(`Hash: ${hash}, Reducer: ${reducer}`);
-          console.log(`Total packages: ${packageCount}`);
-          console.log(`Unique ports: ${uniquePortCount}`);
+          console.log(`Strategy: ${hash}+${reducer}`);
           console.log(
-            `Collisions: ${collisionCount} packages in ${collisions.length} collision groups\n`,
+            `Generating ${packageCount} ports in range ${basePort} - ${basePort + range - 1}`,
+          );
+          console.log(
+            `Collision Probability: ${(collisionProbability * 100).toFixed(2)}%\n`,
           );
 
           if (uniquePortCount < packageCount) {
+            console.log(`Unique ports: ${uniquePortCount}`);
+            console.log(
+              `Collisions: ${collisionCount} packages in ${collisions.length} collision groups\n`,
+            );
+
             console.log('⚠️ Collisions:');
             Object.entries(analysis.ports).forEach(([port, packages]) => {
               if (packages.length > 1) {
@@ -155,12 +150,10 @@ program
               }
             });
             console.log();
+          } else {
+            console.log('No collisions detected!');
           }
 
-          console.log('📈 Distribution:');
-          const utilization = ((uniquePortCount / range) * 100).toFixed(1);
-          console.log(`  Range: ${basePort} - ${basePort + range - 1}`);
-          console.log(`  Utilization: ${utilization}%`);
           break;
         }
       }
@@ -194,8 +187,13 @@ program
         reducer: string;
         collisions: number;
         uniquePorts: number;
-        utilization: number;
       }
+
+      const importMap = parseImportMap(options.importMap);
+
+      const packageCount = Object.keys(importMap.imports).length;
+      const probability =
+        1 - Math.exp((-packageCount * packageCount) / (2 * range));
 
       const results: BenchmarkResult[] = [];
 
@@ -204,7 +202,7 @@ program
         for (const reducer of REDUCER_NAMES) {
           try {
             const analysis = analyzeImportMap(
-              options.importMap,
+              importMap,
               basePort,
               range,
               hash,
@@ -222,7 +220,6 @@ program
               reducer: reducer.charAt(0).toUpperCase() + reducer.slice(1),
               collisions,
               uniquePorts,
-              utilization: (uniquePorts / range) * 100,
             });
           } catch (error) {
             console.warn(
@@ -257,7 +254,6 @@ program
             reducer: r.reducer.toLowerCase(),
             collisions: r.collisions,
             uniquePorts: r.uniquePorts,
-            utilization: r.utilization,
           })),
           summary:
             results.length > 0
@@ -267,7 +263,6 @@ program
                     reducer: results[0]?.reducer.toLowerCase(),
                     collisions: results[0]?.collisions,
                     uniquePorts: results[0]?.uniquePorts,
-                    utilization: results[0]?.utilization,
                   },
                   worstCombination:
                     results.length > 1
@@ -277,7 +272,6 @@ program
                             results[results.length - 1]?.reducer.toLowerCase(),
                           collisions: results[results.length - 1]?.collisions,
                           uniquePorts: results[results.length - 1]?.uniquePorts,
-                          utilization: results[results.length - 1]?.utilization,
                         }
                       : null,
                 }
@@ -291,6 +285,20 @@ program
           `Range: ${basePort} - ${basePort + range - 1} (${range} ports)\n`,
         );
 
+        const strategiesWithCollisions = results.filter(
+          (r) => r.collisions > 0,
+        ).length;
+        console.log(
+          `Collision Probability: ${(probability * 100).toFixed(2)}%`,
+        );
+        const collisionPercent = (
+          (strategiesWithCollisions / results.length) *
+          100
+        ).toFixed(2);
+        console.log(
+          `Strategies with collisions: ${strategiesWithCollisions} / ${results.length} (${collisionPercent}%)\n`,
+        );
+
         console.log('📊 Comparison:');
         console.table(
           results.map((r) => ({
@@ -298,7 +306,6 @@ program
             Reducer: r.reducer,
             Collisions: r.collisions,
             'Unique Ports': r.uniquePorts,
-            'Utilization %': r.utilization,
           })),
         );
 
@@ -309,7 +316,7 @@ program
             `\n🏆 Best Combination: ${winner.hash} + ${winner.reducer}`,
           );
           console.log(
-            `   ${winner.collisions} collisions, ${winner.uniquePorts} unique ports, ${winner.utilization}% utilization`,
+            `   ${winner.collisions} collisions, ${winner.uniquePorts} unique ports`,
           );
 
           const loser = results.length > 1 && results[results.length - 1];

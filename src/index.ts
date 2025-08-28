@@ -114,22 +114,7 @@ export function getPort(
   return port;
 }
 
-/**
- * Get port for the current package by reading package.json
- * @param packageJsonPath - Path to package.json (optional, defaults to current directory)
- * @param basePort - The base port to start from (default: 3001)
- * @param range - The range of ports to use (default: 1997)
- * @param hash - The hash function to use (default: 'twin')
- * @param reducer - The reducer function to use (default: 'knuth')
- * @returns A stable port number for the current package
- */
-export function getPortFromPackageJson(
-  packageJsonPath?: string,
-  basePort = 3001,
-  range = 1997,
-  hash: HashFunction = 'twin',
-  reducer: ReducerFunction = 'knuth',
-): number {
+export function getPackageName(packageJsonPath?: string) {
   const pkgPath = packageJsonPath || path.join(process.cwd(), 'package.json');
 
   if (!fs.existsSync(pkgPath)) {
@@ -150,12 +135,32 @@ export function getPortFromPackageJson(
     throw new Error('package.json must have a "name" field');
   }
 
-  return getPort(packageData.name, basePort, range, hash, reducer);
+  return packageData.name;
+}
+
+export function parseImportMap(importMap: string): ImportMap {
+  if (!fs.existsSync(importMap)) {
+    throw new Error(`Import map file not found at ${importMap}`);
+  }
+
+  try {
+    const importMapContent = fs.readFileSync(importMap, 'utf8');
+    const importMapData = JSON.parse(importMapContent) as ImportMap;
+
+    if (!importMapData.imports || typeof importMapData.imports !== 'object') {
+      throw new Error('Import map must have an "imports" object');
+    }
+    return importMapData;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to parse import map: ${errorMessage}`);
+  }
 }
 
 /**
  * Analyze an import map file and generate ports for all entries
- * @param importMapPath - Path to the import map JSON file
+ * @param importMap - The import map object or path to the JSON file
  * @param basePort - The base port to start from (default: 3001)
  * @param range - The range of ports to use (default: 1997)
  * @param hash - The hash function to use (default: 'twin')
@@ -163,32 +168,17 @@ export function getPortFromPackageJson(
  * @returns Analysis results including ports, collisions, and distribution
  */
 export function analyzeImportMap(
-  importMapPath: string,
+  importMap: string | ImportMap,
   basePort = 3001,
   range = 1997,
   hash: HashFunction = 'twin',
   reducer: ReducerFunction = 'knuth',
 ): ImportMapAnalysis {
-  if (!fs.existsSync(importMapPath)) {
-    throw new Error(`Import map file not found at ${importMapPath}`);
-  }
-
-  let importMap: ImportMap;
-  try {
-    const importMapContent = fs.readFileSync(importMapPath, 'utf8');
-    importMap = JSON.parse(importMapContent) as ImportMap;
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to parse import map: ${errorMessage}`);
-  }
-
-  if (!importMap.imports || typeof importMap.imports !== 'object') {
-    throw new Error('Import map must have an "imports" object');
-  }
+  const importMapBody =
+    typeof importMap === 'string' ? parseImportMap(importMap) : importMap;
 
   const entries = Object.fromEntries(
-    Object.keys(importMap.imports).map((packageName) => [
+    Object.keys(importMapBody.imports).map((packageName) => [
       packageName,
       getPort(packageName, basePort, range, hash, reducer),
     ]),
@@ -202,8 +192,5 @@ export function analyzeImportMap(
     {} as Record<number, string[]>,
   );
 
-  return {
-    entries,
-    ports,
-  };
+  return { entries, ports };
 }
