@@ -1,0 +1,16 @@
+{
+  "imports": {
+    "@stellar-games/ui-components": "https://cdn.stellargames.io/ui-components/v2.1.0/index.js",
+    "@stellar-games/asset-loader": "https://cdn.stellargames.io/asset-loader/v1.4.2/loader.js",
+    "@stellar-games/physics-engine": "https://cdn.stellargames.io/physics/v3.0.1/engine.js",
+    "nebula-renderer": "https://cdn.stellargames.io/nebula-renderer/v0.8.3/render.js",
+    "quantum-audio": "https://cdn.stellargames.io/quantum-audio/v2.2.0/audio.js",
+    "galaxy-map": "https://cdn.stellargames.io/galaxy-map/v1.1.5/map.js",
+    "plasma-effects": "https://cdn.stellargames.io/plasma-effects/v0.9.7/effects.js",
+    "starship-controls": "https://cdn.stellargames.io/starship-controls/v1.3.1/controls.js",
+    "warp-navigation": "https://cdn.stellargames.io/warp-navigation/v2.0.4/nav.js",
+    "cosmic-chat": "https://cdn.stellargames.io/cosmic-chat/v1.2.8/chat.js",
+    "meteor-utils": "https://cdn.stellargames.io/meteor-utils/v0.6.2/utils.js",
+    "void-database": "https://cdn.stellargames.io/void-database/v1.7.0/db.js"
+  }
+}

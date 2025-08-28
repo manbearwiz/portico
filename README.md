@@ -25,11 +25,7 @@ In microfrontend architectures, each app needs its own development port. Manual 
 
 ## ✨ Solution
 
-Portico generates **deterministic ports** using:
-
-1. **Package name hashing** (MD5) for consistency
-2. **Modulo calculation** within a safe port range
-3. **Base port offset** for customization
+Portico generates **deterministic ports** by hashing the package name and applying a series of transformations.
 
 **Benefits:**
 
@@ -46,7 +42,7 @@ Portico generates **deterministic ports** using:
 ```bash
 # Get port for current package (reads ./package.json)
 portico
-# Output: 4237
+# Output: 4703
 
 # Get port with custom base and range
 portico --base 5000 --range 100
@@ -58,23 +54,14 @@ portico --name my-awesome-app
 
 # Use custom package.json location
 portico --package /path/to/package.json
+
+# Use specific hash and reducer algorithms
+portico --name my-app --hash twin --reducer knuth
+portico --name my-app --hash double --reducer knuth
+portico --name my-app --hash safe --reducer lcg
 ```
 
 ### Integration Examples
-
-#### Angular
-
-```bash
-# package.json scripts
-{
-  "scripts": {
-    "start": "ng serve --port=$(portico)",
-    "dev": "ng serve --port=$(portico) --host=0.0.0.0"
-  }
-}
-```
-
-#### React (Create React App)
 
 ```bash
 # .env file
@@ -83,29 +70,9 @@ PORT=$(portico)
 # Or directly in package.json
 {
   "scripts": {
-    "start": "PORT=$(portico) react-scripts start"
-  }
-}
-```
-
-#### Webpack Dev Server
-
-```bash
-# package.json
-{
-  "scripts": {
-    "dev": "webpack serve --port $(portico)"
-  }
-}
-```
-
-#### Vite
-
-```bash
-# package.json
-{
-  "scripts": {
-    "dev": "vite --port $(portico)"
+    "start": "PORT=$(portico) npm start"
+    //or
+    "dev": "npm start -- --port $(portico)"
   }
 }
 ```
@@ -118,86 +85,114 @@ import { getPort, getPortFromPackageJson } from "portico";
 
 // Calculate port for any package name
 const port1 = getPort("my-awesome-app");
-console.log(port1); // 4318
 
 // Get port for current package
 const port2 = getPortFromPackageJson();
-console.log(port2); // Based on current package.json name
 
-// Custom configuration
-const port3 = getPort("my-app", 5000, 100); // base=5000, range=100
-console.log(port3); // Between 5000-5099
-```
-
-```javascript
-// CommonJS (legacy)
-const { getPort, getPortFromPackageJson } = require("portico");
-
-// Same usage as above
-const port = getPort("my-awesome-app");
-console.log(port); // 4318
+// Custom configuration with specific algorithms
+const port3 = getPort("my-app", 5000, 100, "twin", "knuth");
+const port4 = getPort("my-app", 3001, 1997, "double", "knuth");
+const port5 = getPort("my-app", 3001, 1997, "safe", "lcg");
 ```
 
 ## ⚙️ Configuration
 
 ### CLI Options
 
-| Option      | Short | Description          | Default          |
-| ----------- | ----- | -------------------- | ---------------- |
-| `--base`    | `-b`  | Base port number     | `4200`           |
-| `--range`   | `-r`  | Port range size      | `200`            |
-| `--package` | `-p`  | Path to package.json | `./package.json` |
-| `--name`    | `-n`  | Package name to use  | -                |
+| Option      | Short | Description                                      | Default          |
+| ----------- | ----- | ------------------------------------------------ | ---------------- |
+| `--base`    | `-b`  | Base port number                                 | `3001`           |
+| `--range`   | `-r`  | Port range size                                  | `1997`           |
+| `--hash`    |       | Hash function: sdbm, safe, twin, cascade, double | `twin`           |
+| `--reducer` |       | Reducer: modulo, knuth, lcg                      | `knuth`          |
+| `--package` | `-p`  | Path to package.json                             | `./package.json` |
+| `--name`    | `-n`  | Package name to use                              | -                |
 
-### Port Range Recommendations
+### Benchmark and Analysis Commands
 
-| Framework   | Suggested Base | Range | Total Range |
-| ----------- | -------------- | ----- | ----------- |
-| **Angular** | `4200`         | `200` | `4200-4399` |
-| **React**   | `3000`         | `200` | `3000-3199` |
-| **Vue**     | `8080`         | `200` | `8080-8279` |
-| **Custom**  | `5000`         | `500` | `5000-5499` |
+```bash
+# Analyze import map for port collisions
+portico analyze -i import-map.json
+
+# Compare all hash+reducer combinations (table output)
+portico benchmark -i import-map.json
+
+# Get JSON output for programmatic analysis
+portico benchmark -i import-map.json --output json
+
+# Custom range analysis
+portico benchmark -i import-map.json --range 997 --base 4000
+```
 
 ### API Reference
 
-#### `getPort(packageName, basePort?, range?)`
+#### `getPort(packageName, basePort?, range?, hash?, reducer?)`
 
 Generate a port for a specific package name.
 
 - `packageName` (string): Package name to hash
-- `basePort` (number, optional): Starting port (default: 4200)
-- `range` (number, optional): Port range size (default: 200)
+- `basePort` (number, optional): Starting port (default: 3001)
+- `range` (number, optional): Port range size (default: 1997)
+- `hash` (string, optional): Hash function - 'sdbm', 'safe', 'twin', 'cascade', 'double' (default: 'twin')
+- `reducer` (string, optional): Reducer function - 'modulo', 'knuth', 'lcg' (default: 'knuth')
 - **Returns:** Port number between `basePort` and `basePort + range - 1`
 
-#### `getPortFromPackageJson(packageJsonPath?, basePort?, range?)`
+#### `getPortFromPackageJson(packageJsonPath?, basePort?, range?, hash?, reducer?)`
 
 Generate a port by reading the current package.json.
 
 - `packageJsonPath` (string, optional): Path to package.json (default: ./package.json)
-- `basePort` (number, optional): Starting port (default: 4200)
-- `range` (number, optional): Port range size (default: 200)
+- `basePort` (number, optional): Starting port (default: 3001)
+- `range` (number, optional): Port range size (default: 1997)
+- `hash` (string, optional): Hash function (default: 'twin')
+- `reducer` (string, optional): Reducer function (default: 'knuth')
 - **Returns:** Port number for the package
+
+#### `analyzeImportMap(importMapPath, basePort?, range?, hash?, reducer?)`
+
+Analyze an import map file for port collisions and distribution.
+
+- `importMapPath` (string): Path to import map JSON file
+- `basePort` (number, optional): Starting port (default: 3001)
+- `range` (number, optional): Port range size (default: 1997)
+- `hash` (string, optional): Hash function (default: 'twin')
+- `reducer` (string, optional): Reducer function (default: 'knuth')
+- **Returns:** Analysis object with collision data and port distribution
 
 ## 🔧 Advanced Usage
 
-### Team Configuration
+### Algorithm Selection
 
-Create a shared configuration file:
+Choose the best hash+reducer combination for your needs:
 
 ```javascript
-// scripts/dev-ports.js
-import { getPort } from "portico";
+const port = getPort("my-app", 3001, 1997, "twin", "knuth");
 
-const TEAM_CONFIG = {
-  basePort: 4200,
-  range: 200,
-};
+const port = getPort("my-app", 3001, 1997, "double", "knuth");
 
-function getTeamPort(packageName) {
-  return getPort(packageName, TEAM_CONFIG.basePort, TEAM_CONFIG.range);
-}
+const port = getPort("my-app", 3001, 1997, "safe", "lcg");
+```
 
-export { getTeamPort };
+**Available Hash Functions:**
+
+- `twin` - Twin prime hashing (recommended) 🏆
+- `double` - Double hashing algorithm 🥈
+- `safe` - Safe prime hashing 🥉
+- `cascade` - Prime cascade method
+- `sdbm` - Simple SDBM algorithm
+
+**Available Reducers:**
+
+- `knuth` - Multiplicative method (recommended) 🏆
+- `lcg` - Linear congruential generator 🥈
+- `modulo` - Simple modulo operation 🥉
+
+### Collision Analysis
+
+Analyze your microfrontend ecosystem for potential port conflicts:
+
+```bash
+portico analyze -i importmaps.json
 ```
 
 ### Docker Integration
@@ -240,18 +235,13 @@ npm run test:watch
 # Test specific package names
 portico --name @company/my-app
 portico --name my-awesome-microfrontend
-```
 
-## 📊 Port Distribution
+# Benchmark different algorithms
+portico benchmark -i importmaps.json
 
-Portico uses MD5 hashing with modulo arithmetic for even distribution:
-
-```javascript
-// Example outputs with default config (base: 4200, range: 200)
-getPort("app-auth"); // → 4237
-getPort("app-dashboard"); // → 4318
-getPort("app-profile"); // → 4156
-getPort("@company/app"); // → 4389
+# Test collision rates with different configurations
+portico benchmark -i importmaps.json --range 787  # Prime range
+portico benchmark -i importmaps.json --range 1000 # Round number
 ```
 
 ## 🤝 Contributing
@@ -265,13 +255,6 @@ getPort("@company/app"); // → 4389
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🔗 Related
-
-- [Webpack Dev Server](https://webpack.js.org/configuration/dev-server/)
-- [Angular CLI](https://angular.io/cli)
-- [Create React App](https://create-react-app.dev/)
-- [Vite](https://vitejs.dev/)
 
 ---
 
