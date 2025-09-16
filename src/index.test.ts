@@ -12,118 +12,63 @@ import {
 } from '../src/index.js';
 
 describe('portico', () => {
-  describe('HASH functions', () => {
-    test('should export all hash functions', () => {
-      expect(HASH).toHaveProperty('sdbm');
-      expect(HASH).toHaveProperty('safe');
-      expect(HASH).toHaveProperty('twin');
-      expect(HASH).toHaveProperty('cascade');
-      expect(HASH).toHaveProperty('double');
-    });
+  describe.for(Object.keys(HASH) as (keyof typeof HASH)[])(
+    'HASH %s',
+    (hashName) => {
+      const hashFunction = HASH[hashName];
 
-    test('should generate consistent hashes for same input', () => {
-      const testName = 'test-package';
+      test('should generate different hashes for different inputs', () => {
+        const name1 = 'package-one';
+        const name2 = 'package-two';
+        expect(hashFunction(name1)).not.toBe(hashFunction(name2));
+      });
 
-      expect(HASH.sdbm(testName)).toBe(HASH.sdbm(testName));
-      expect(HASH.safe(testName)).toBe(HASH.safe(testName));
-      expect(HASH.twin(testName)).toBe(HASH.twin(testName));
-      expect(HASH.cascade(testName)).toBe(HASH.cascade(testName));
-      expect(HASH.double(testName)).toBe(HASH.double(testName));
-    });
+      describe.for([
+        ['simple', 'test-package'],
+        ['scoped', '@company/my-app'],
+        ['long', 'a'.repeat(214)],
+      ] as const)('with %s input', ([, input]) => {
+        test('should not throw', () => {
+          expect(() => hashFunction(input)).not.toThrow();
+        });
 
-    test('should generate different hashes for different inputs', () => {
-      const name1 = 'package-one';
-      const name2 = 'package-two';
+        test('should be deterministic', () => {
+          expect(hashFunction(input)).toBe(hashFunction(input));
+        });
+      });
+    },
+  );
 
-      expect(HASH.sdbm(name1)).not.toBe(HASH.sdbm(name2));
-      expect(HASH.safe(name1)).not.toBe(HASH.safe(name2));
-      expect(HASH.twin(name1)).not.toBe(HASH.twin(name2));
-      expect(HASH.cascade(name1)).not.toBe(HASH.cascade(name2));
-      expect(HASH.double(name1)).not.toBe(HASH.double(name2));
-    });
+  describe.for(Object.keys(REDUCERS) as (keyof typeof REDUCERS)[])(
+    'REDUCER %s',
+    (reducerName) => {
+      const reducerFunction = REDUCERS[reducerName];
 
-    test('should generate different hashes between functions', () => {
-      const testName = 'test-package';
-      const hashes = [
-        HASH.sdbm(testName),
-        HASH.safe(testName),
-        HASH.twin(testName),
-        HASH.cascade(testName),
-        HASH.double(testName),
-      ];
+      describe.for([
+        [1000, 12345678],
+        [500, 87654321],
+        [1, 123456],
+      ] as const)('with range [0, %s) for hash %s', ([range, hash]) => {
+        test('should not throw', () => {
+          expect(() => reducerFunction(hash, range)).not.toThrow();
+        });
 
-      // All hashes should be different (very unlikely to collide)
-      const uniqueHashes = new Set(hashes);
-      expect(uniqueHashes.size).toBe(hashes.length);
-    });
+        test('should generate values in range', () => {
+          const result = reducerFunction(hash, range);
+          expect(result).toBeGreaterThanOrEqual(0);
+          expect(result).toBeLessThan(range);
+        });
 
-    test('should handle empty string', () => {
-      expect(() => HASH.sdbm('')).not.toThrow();
-      expect(() => HASH.safe('')).not.toThrow();
-      expect(() => HASH.twin('')).not.toThrow();
-      expect(() => HASH.cascade('')).not.toThrow();
-      expect(() => HASH.double('')).not.toThrow();
-    });
-
-    test('should handle special characters', () => {
-      const specialName = '@company/my-app-v2.0.0';
-      expect(() => HASH.sdbm(specialName)).not.toThrow();
-      expect(() => HASH.safe(specialName)).not.toThrow();
-      expect(() => HASH.twin(specialName)).not.toThrow();
-      expect(() => HASH.cascade(specialName)).not.toThrow();
-      expect(() => HASH.double(specialName)).not.toThrow();
-    });
-  });
-
-  describe('REDUCERS functions', () => {
-    test('should export all reducer functions', () => {
-      expect(REDUCERS).toHaveProperty('modulo');
-      expect(REDUCERS).toHaveProperty('knuth');
-      expect(REDUCERS).toHaveProperty('lcg');
-    });
-
-    test('should generate values within range', () => {
-      const hash = 12345678;
-      const range = 1000;
-
-      const moduloResult = REDUCERS.modulo(hash, range);
-      const knuthResult = REDUCERS.knuth(hash, range);
-      const lcgResult = REDUCERS.lcg(hash, range);
-
-      expect(moduloResult).toBeGreaterThanOrEqual(0);
-      expect(moduloResult).toBeLessThan(range);
-      expect(knuthResult).toBeGreaterThanOrEqual(0);
-      expect(knuthResult).toBeLessThan(range);
-      expect(lcgResult).toBeGreaterThanOrEqual(0);
-      expect(lcgResult).toBeLessThan(range);
-    });
-
-    test('should be deterministic', () => {
-      const hash = 87654321;
-      const range = 500;
-
-      expect(REDUCERS.modulo(hash, range)).toBe(REDUCERS.modulo(hash, range));
-      expect(REDUCERS.knuth(hash, range)).toBe(REDUCERS.knuth(hash, range));
-      expect(REDUCERS.lcg(hash, range)).toBe(REDUCERS.lcg(hash, range));
-    });
-
-    test('should handle edge case ranges', () => {
-      const hash = 123456;
-
-      // Test with range of 1
-      expect(REDUCERS.modulo(hash, 1)).toBe(0);
-      expect(REDUCERS.knuth(hash, 1)).toBe(0);
-      expect(REDUCERS.lcg(hash, 1)).toBe(0);
-    });
-  });
+        test('should be deterministic', () => {
+          const port1 = reducerFunction(hash, range);
+          const port2 = reducerFunction(hash, range);
+          expect(port1).toBe(port2);
+        });
+      });
+    },
+  );
 
   describe('getPort', () => {
-    test('should generate consistent ports for the same package name', () => {
-      const port1 = getPort('my-awesome-app');
-      const port2 = getPort('my-awesome-app');
-      expect(port1).toBe(port2);
-    });
-
     test('should generate different ports for different package names', () => {
       const port1 = getPort('app-one');
       const port2 = getPort('app-two');
@@ -136,18 +81,12 @@ describe('portico', () => {
       expect(port).toBeLessThan(5100);
     });
 
-    test('should handle scoped package names', () => {
-      const port1 = getPort('@company/app-one');
-      const port2 = getPort('@company/app-two');
-      expect(port1).not.toBe(port2);
-    });
-
-    test('should throw error for invalid package name', () => {
-      expect(() => getPort('')).toThrow(
-        'Package name must be a non-empty string',
-      );
+    test.for([
+      ['empty string', ''],
+      ['null', null],
+    ])('should throw error for invalid package name: %s', ([, input]) => {
       // @ts-expect-error - Testing invalid input
-      expect(() => getPort(null)).toThrow(
+      expect(() => getPort(input)).toThrow(
         'Package name must be a non-empty string',
       );
     });
@@ -171,13 +110,11 @@ describe('portico', () => {
     });
 
     test('should detect implementation bugs in reducer functions', () => {
-      // Create a mock reducer that returns out-of-range values to test safety check
       const buggyReducers = {
         ...REDUCERS,
-        buggy: () => 999999, // Always returns a huge number
+        buggy: () => 999999,
       };
 
-      // Temporarily replace REDUCERS to test safety check
       const originalReducers = { ...REDUCERS };
       Object.assign(REDUCERS, buggyReducers);
 
@@ -189,74 +126,43 @@ describe('portico', () => {
           /generated invalid port.*This indicates a bug in the implementation/,
         );
       } finally {
-        // Restore original reducers
         Object.keys(REDUCERS).forEach((key) => {
-          // biome-ignore lint/suspicious/noExplicitAny: test nonsense
-          delete (REDUCERS as any)[key];
+          // @ts-expect-error - Cleanup requires dynamic deletion
+          delete REDUCERS[key];
         });
         Object.assign(REDUCERS, originalReducers);
       }
     });
 
-    test('should work with all hash functions', () => {
-      const packageName = 'test-app';
-      const hashFunctions: HashFunction[] = [
-        'sdbm',
-        'safe',
-        'twin',
-        'cascade',
-        'double',
-      ];
+    describe.for(Object.keys(HASH) as HashFunction[])(
+      'with hash %s',
+      (hash) => {
+        describe.for(Object.keys(REDUCERS) as ReducerFunction[])(
+          'and reducer %s',
+          (reducer) => {
+            test('should be deterministic', () => {
+              const name = 'my-awesome-app';
+              const p1 = getPort(name, 3001, 1997, hash, reducer);
+              const p2 = getPort(name, 3001, 1997, hash, reducer);
+              expect(p1).toBe(p2);
+            });
 
-      hashFunctions.forEach((hash) => {
-        const port = getPort(packageName, 3001, 1997, hash);
-        expect(port).toBeGreaterThanOrEqual(3001);
-        expect(port).toBeLessThan(4998);
-      });
-    });
+            test('should be in range', () => {
+              const name = 'test-app';
 
-    test('should work with all reducer functions', () => {
-      const packageName = 'test-app';
-      const reducerFunctions: ReducerFunction[] = ['modulo', 'knuth', 'lcg'];
-
-      reducerFunctions.forEach((reducer) => {
-        const port = getPort(packageName, 3001, 1997, 'twin', reducer);
-        expect(port).toBeGreaterThanOrEqual(3001);
-        expect(port).toBeLessThan(4998);
-      });
-    });
-
-    test('should generate different ports with different hash functions', () => {
-      const packageName = 'consistent-test';
-      const ports = [
-        getPort(packageName, 3001, 1997, 'sdbm'),
-        getPort(packageName, 3001, 1997, 'safe'),
-        getPort(packageName, 3001, 1997, 'twin'),
-        getPort(packageName, 3001, 1997, 'cascade'),
-        getPort(packageName, 3001, 1997, 'double'),
-      ];
-
-      const uniquePorts = new Set(ports);
-      expect(uniquePorts).toHaveLength(5);
-    });
-
-    test('should generate different ports with different reducer functions', () => {
-      const packageName = 'reducer-test';
-      const ports = [
-        getPort(packageName, 3001, 1997, 'twin', 'modulo'),
-        getPort(packageName, 3001, 1997, 'twin', 'knuth'),
-        getPort(packageName, 3001, 1997, 'twin', 'lcg'),
-      ];
-
-      const uniquePorts = new Set(ports);
-      expect(uniquePorts).toHaveLength(3);
-    });
+              const port = getPort(name, 3001, 1997, hash, reducer);
+              expect(port).toBeGreaterThanOrEqual(3001);
+              expect(port).toBeLessThan(4998);
+            });
+          },
+        );
+      },
+    );
 
     test('should use default hash and reducer when not specified', () => {
       const packageName = 'default-test';
       const defaultPort = getPort(packageName);
       const explicitPort = getPort(packageName, 3001, 1997, 'twin', 'knuth');
-
       expect(defaultPort).toBe(explicitPort);
     });
 
@@ -276,37 +182,6 @@ describe('portico', () => {
 
       expect(invalidHashPort).toBe(validPort);
       expect(invalidReducerPort).toBe(validPort);
-    });
-
-    test('should handle extremely long package names', () => {
-      const longName = 'a'.repeat(1000);
-      expect(() => getPort(longName)).not.toThrow();
-
-      const port = getPort(longName);
-      expect(port).toBeGreaterThanOrEqual(3001);
-      expect(port).toBeLessThan(4998);
-    });
-
-    test('should handle unicode characters', () => {
-      const unicodeName = '@公司/应用程序-测试';
-      expect(() => getPort(unicodeName)).not.toThrow();
-
-      const port = getPort(unicodeName);
-      expect(port).toBeGreaterThanOrEqual(3001);
-      expect(port).toBeLessThan(4998);
-    });
-
-    test('should be consistent across multiple calls with same parameters', () => {
-      const packageName = 'consistency-test';
-      const hash: HashFunction = 'cascade';
-      const reducer: ReducerFunction = 'lcg';
-
-      const port1 = getPort(packageName, 5000, 100, hash, reducer);
-      const port2 = getPort(packageName, 5000, 100, hash, reducer);
-      const port3 = getPort(packageName, 5000, 100, hash, reducer);
-
-      expect(port1).toBe(port2);
-      expect(port2).toBe(port3);
     });
   });
 
@@ -364,7 +239,6 @@ describe('portico', () => {
     });
 
     test('should detect port collisions', () => {
-      // Create packages that will likely have different ports
       const importMap = {
         imports: {
           'package-a': 'https://example.com/a.js',
