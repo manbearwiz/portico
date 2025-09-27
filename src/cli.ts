@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import {
   analyzeImportMap,
   getPackageName,
@@ -20,77 +20,182 @@ const REDUCER_NAMES = Object.keys(REDUCERS) as ReducerFunction[];
 const HASH_LIST_STRING = HASH_NAMES.join(', ');
 const REDUCER_LIST_STRING = REDUCER_NAMES.join(', ');
 
+// Helper functions to reduce duplication
+function createBasePortOption() {
+  return new Option('-b, --base <port>', 'Base port number')
+    .default(3001)
+    .env('PORTICO_BASE_PORT')
+    .argParser((value) => {
+      const parsed = parseInt(value, 10);
+      if (
+        isNaN(parsed) ||
+        typeof parsed !== 'number' ||
+        parsed < 1 ||
+        parsed > 65535
+      ) {
+        console.error('Error: Base port must be a number between 1 and 65535');
+        process.exit(1);
+      }
+      return parsed;
+    });
+}
+
+function createRangeOption() {
+  return new Option('-r, --range <range>', 'Port range size')
+    .default(1997)
+    .env('PORTICO_RANGE')
+    .argParser((value) => {
+      const parsed = parseInt(value, 10);
+      if (isNaN(parsed) || typeof parsed !== 'number' || parsed < 1) {
+        throw new Error('Range must be a positive number');
+      }
+      return parsed;
+    });
+}
+
+function createHashOption() {
+  return new Option('--hash <type>', `Hash function: ${HASH_LIST_STRING}`)
+    .default('twin')
+    .choices(HASH_NAMES)
+    .env('PORTICO_HASH');
+}
+
+function createReducerOption() {
+  return new Option(
+    '--reducer <type>',
+    `Reducer function: ${REDUCER_LIST_STRING}`,
+  )
+    .default('knuth')
+    .choices(REDUCER_NAMES)
+    .env('PORTICO_REDUCER');
+}
+
+function parsePortOptions(options: any): { basePort: number; range: number } {
+  const { basePort, range } = options;
+  if (basePort + range > 65535) {
+    console.error(
+      'Error: Base port + range exceeds maximum port number (65535)',
+    );
+    process.exit(1);
+  }
+  return { basePort, range };
+}
+
+function createEnvironmentVariablesHelpText(): string {
+  return `
+Environment Variables:
+  PORTICO_BASE_PORT                   # Default base port
+  PORTICO_RANGE                       # Default port range
+  PORTICO_HASH                        # Default hash function
+  PORTICO_REDUCER                     # Default reducer function`;
+}
+
+function handleError(error: unknown, message?: string): never {
+  if (error instanceof Error) {
+    console.error(`Error: ${message ? `${message}: ` : ''}${error.message}`);
+  } else {
+    console.error(`Error: ${message || 'An unexpected error occurred'}`);
+  }
+  process.exit(1);
+}
+
 program
   .name('portico')
   .description(
     'Generate stable, unique development ports based on package name',
+  )
+  .option('--verbose', 'Enable verbose output')
+  .configureHelp({
+    sortSubcommands: true,
+    showGlobalOptions: true,
+  })
+  .showHelpAfterError('(add --help for additional information)')
+  .showSuggestionAfterError()
+  .addHelpText(
+    'after',
+    `
+
+Examples:
+  $ portico                    # Generate port from package.json
+  $ portico g -n my-app           # Same as above (shorthand)
+
+For more help on a specific command:
+  $ portico <command> --help
+
+Repository: https://github.com/manbearwiz/portico`,
   );
 
 // Generate command
 program
   .command('generate', { isDefault: true })
+  .alias('g')
   .description('Generate a port from package.json or package name')
-  .option('-b, --base <port>', 'Base port number (default: 3001)', '3001')
-  .option('-r, --range <range>', 'Port range size (default: 1997)', '1997')
-  .option(
-    '--hash <type>',
-    `Hash function: ${HASH_LIST_STRING} (default: twin)`,
-    'twin',
-  )
-  .option(
-    '--reducer <type>',
-    `Reducer function: ${REDUCER_LIST_STRING} (default: knuth)`,
-    'knuth',
-  )
-  .option(
-    '-p, --package <path>',
-    'Path to package.json (default: ./package.json)',
-  )
+  .addOption(createBasePortOption())
+  .addOption(createRangeOption())
+  .addOption(createHashOption())
+  .addOption(createReducerOption())
+  .option('-p, --package <path>', 'Path to package.json', './package.json')
   .option('-n, --name <name>', 'Package name to calculate port for')
+  .addHelpText(
+    'after',
+    `
+
+Examples:
+  $ portico                              # Use current package.json
+  $ portico g -n my-app                  # Same as above (shorthand)
+  $ portico --base 4000 -n my-app        # Custom base port
+  $ portico --hash sdbm -n my-app        # Different hash algorithm${createEnvironmentVariablesHelpText()}`,
+  )
   .action((options) => {
     try {
-      const basePort = parseInt(options.base, 10);
-      const range = parseInt(options.range, 10);
+      const { basePort, range } = parsePortOptions(options);
       const hash = options.hash as HashFunction;
       const reducer = options.reducer as ReducerFunction;
       const name = options.name ?? getPackageName(options.package);
       const port = getPort(name, basePort, range, hash, reducer);
 
-      console.log(port);
+      // Verbose output if requested
+      const globalOptions = program.optsWithGlobals();
+      if (globalOptions['verbose']) {
+        console.error(`Package: ${name}`);
+        console.error(`Strategy: ${hash}+${reducer}`);
+        console.error(`Range: ${basePort}-${basePort + range - 1}`);
+        console.error(`Port: ${port}`);
+      } else {
+        console.log(port);
+      }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      console.error(`Error: ${errorMessage}`);
-      process.exit(1);
+      handleError(error);
     }
   });
 
 // Analyze command
 program
   .command('analyze')
+  .alias('a')
   .description('Analyze import map and generate ports for all entries')
-  .option('-b, --base <port>', 'Base port number (default: 3001)', '3001')
-  .option('-r, --range <range>', 'Port range size (default: 1997)', '1997')
-  .option(
-    '--hash <type>',
-    `Hash function: ${HASH_LIST_STRING} (default: twin)`,
-    'twin',
-  )
-  .option(
-    '--reducer <type>',
-    `Reducer function: ${REDUCER_LIST_STRING} (default: knuth)`,
-    'knuth',
-  )
+  .addOption(createBasePortOption())
+  .addOption(createRangeOption())
+  .addOption(createHashOption())
+  .addOption(createReducerOption())
   .requiredOption('-i, --import-map <path>', 'Path to import map JSON file')
-  .option(
-    '-o, --output <format>',
-    'Output format: table, json, csv (default: table)',
-    'table',
+  .addOption(
+    new Option('-o, --output <format>', 'Output format')
+      .default('table')
+      .choices(['table', 'json', 'csv']),
+  )
+  .addHelpText(
+    'after',
+    `
+
+Examples:
+  $ portico analyze -i imports.json              # Analyze with table output
+  $ portico a -i imports.json -o json            # JSON output (shorthand)
+  $ portico analyze -i imports.json -o csv       # CSV output${createEnvironmentVariablesHelpText()}`,
   )
   .action((options) => {
     try {
-      const basePort = parseInt(options.base, 10);
-      const range = parseInt(options.range, 10);
+      const { basePort, range } = parsePortOptions(options);
       const hash = options.hash as HashFunction;
       const reducer = options.reducer as ReducerFunction;
 
@@ -158,29 +263,35 @@ program
         }
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      console.error(`Error: ${errorMessage}`);
-      process.exit(1);
+      handleError(error, 'Failed to analyze import map');
     }
   });
 
 // Benchmark command
 program
   .command('benchmark')
-  .description('Compare the two port strategies')
-  .option('-b, --base <port>', 'Base port number (default: 3001)', '3001')
-  .option('-r, --range <range>', 'Port range size (default: 1997)', '1997')
-  .option(
-    '-o, --output <format>',
-    'Output format: table, json (default: table)',
-    'table',
+  .alias('b')
+  .description('Compare hash and reducer strategy combinations')
+  .addOption(createBasePortOption())
+  .addOption(createRangeOption())
+  .addOption(
+    new Option('-o, --output <format>', 'Output format')
+      .default('table')
+      .choices(['table', 'json']),
   )
   .requiredOption('-i, --import-map <path>', 'Path to import map JSON file')
+  .addHelpText(
+    'after',
+    `
+
+Examples:
+  $ portico benchmark -i imports.json           # Compare all strategies
+  $ portico b -i imports.json -o json          # JSON output (shorthand)
+  $ portico benchmark -i imports.json --base 4000  # Custom base port${createEnvironmentVariablesHelpText()}`,
+  )
   .action((options) => {
     try {
-      const basePort = parseInt(options.base, 10);
-      const range = parseInt(options.range, 10);
+      const { basePort, range } = parsePortOptions(options);
 
       interface BenchmarkResult {
         hash: string;
@@ -338,10 +449,7 @@ program
         }
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      console.error(`Error: ${errorMessage}`);
-      process.exit(1);
+      handleError(error, 'Failed to benchmark import map');
     }
   });
 
