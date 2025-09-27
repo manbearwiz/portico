@@ -315,7 +315,7 @@ describe('portico', () => {
         testImportMapPath,
         3001,
         1997,
-        'safe',
+        'sdbm',
         'modulo',
       );
 

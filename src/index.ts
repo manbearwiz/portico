@@ -39,9 +39,7 @@ function primeHash(
 
 export const HASH = {
   sdbm: (name: string): number => primeHash(name, [65599]),
-  safe: (name: string): number => primeHash(name, [23]),
   twin: (name: string): number => primeHash(name, [31, 37]),
-  cascade: (name: string): number => primeHash(name, [31, 37, 41, 43, 47]),
   double: (name: string): number => {
     const hash1 = primeHash(name, [31]) % 2147483647;
     const hash2 = primeHash(name, [37], 1) % 2147483647;
