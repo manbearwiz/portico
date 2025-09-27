@@ -28,7 +28,7 @@ program
 
 // Generate command
 program
-  .command('generate')
+  .command('generate', { isDefault: true })
   .description('Generate a port from package.json or package name')
   .option('-b, --base <port>', 'Base port number (default: 3001)', '3001')
   .option('-r, --range <range>', 'Port range size (default: 1997)', '1997')
