@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export interface PackageData {
@@ -90,11 +90,11 @@ export function getPort(
     throw new Error('Port range must be between 1 and 10000');
   }
 
-  // Get the hash and reducer functions
-  const hashFunction = HASH[hash] || HASH.twin;
-  const reducerFunction = REDUCERS[reducer] || REDUCERS.knuth;
+  // Get functions with fallbacks
+  const hashFunction = HASH[hash] ?? HASH.twin;
+  const reducerFunction = REDUCERS[reducer] ?? REDUCERS.knuth;
 
-  // Generate hash and apply reducer
+  // Generate and return port
   const hashValue = hashFunction(packageName);
   const offset = reducerFunction(hashValue, range);
   const port = basePort + offset;
@@ -112,22 +112,11 @@ export function getPort(
   return port;
 }
 
-export function getPackageName(packageJsonPath?: string) {
+export async function getPackageName(packageJsonPath?: string) {
   const pkgPath = packageJsonPath || path.join(process.cwd(), 'package.json');
 
-  if (!fs.existsSync(pkgPath)) {
-    throw new Error(`package.json not found at ${pkgPath}`);
-  }
-
-  let packageData: PackageData;
-  try {
-    const packageContent = fs.readFileSync(pkgPath, 'utf8');
-    packageData = JSON.parse(packageContent) as PackageData;
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to parse package.json: ${errorMessage}`);
-  }
+  const packageContent = await fs.readFile(pkgPath, 'utf8');
+  const packageData = JSON.parse(packageContent) as PackageData;
 
   if (!packageData.name) {
     throw new Error('package.json must have a "name" field');
@@ -136,24 +125,29 @@ export function getPackageName(packageJsonPath?: string) {
   return packageData.name;
 }
 
-export function parseImportMap(importMap: string): ImportMap {
-  if (!fs.existsSync(importMap)) {
-    throw new Error(`Import map file not found at ${importMap}`);
+/**
+ * Determine if a string is a URL
+ */
+function isUrl(source: string): boolean {
+  return source.startsWith('http://') || source.startsWith('https://');
+}
+
+export async function parseImportMap(source: string): Promise<ImportMap> {
+  let importMapData: ImportMap;
+
+  if (isUrl(source)) {
+    const response = await fetch(source);
+    importMapData = await response.json();
+  } else {
+    const content = await fs.readFile(source, 'utf8');
+    importMapData = JSON.parse(content);
   }
 
-  try {
-    const importMapContent = fs.readFileSync(importMap, 'utf8');
-    const importMapData = JSON.parse(importMapContent) as ImportMap;
-
-    if (!importMapData.imports || typeof importMapData.imports !== 'object') {
-      throw new Error('Import map must have an "imports" object');
-    }
-    return importMapData;
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to parse import map: ${errorMessage}`);
+  if (!importMapData.imports || typeof importMapData.imports !== 'object') {
+    throw new Error('Import map must have an "imports" object');
   }
+
+  return importMapData;
 }
 
 /**
@@ -165,30 +159,28 @@ export function parseImportMap(importMap: string): ImportMap {
  * @param reducer - The reducer function to use (default: 'knuth')
  * @returns Analysis results including ports, collisions, and distribution
  */
-export function analyzeImportMap(
+export async function analyzeImportMap(
   importMap: string | ImportMap,
   basePort = 3001,
   range = 1997,
   hash: HashFunction = 'twin',
   reducer: ReducerFunction = 'knuth',
-): ImportMapAnalysis {
+): Promise<ImportMapAnalysis> {
   const importMapBody =
-    typeof importMap === 'string' ? parseImportMap(importMap) : importMap;
+    typeof importMap === 'string' ? await parseImportMap(importMap) : importMap;
 
-  const entries = Object.fromEntries(
-    Object.keys(importMapBody.imports).map((packageName) => [
-      packageName,
-      getPort(packageName, basePort, range, hash, reducer),
-    ]),
-  );
+  // Generate port entries for all packages
+  const entries: Record<string, number> = {};
+  for (const packageName of Object.keys(importMapBody.imports)) {
+    entries[packageName] = getPort(packageName, basePort, range, hash, reducer);
+  }
 
-  const ports = Object.entries(entries).reduce(
-    (acc, [packageName, port]) => {
-      acc[port] = [...(acc[port] || []), packageName];
-      return acc;
-    },
-    {} as Record<number, string[]>,
-  );
+  // Group packages by port for collision detection
+  const ports: Record<number, string[]> = {};
+  for (const [packageName, port] of Object.entries(entries)) {
+    ports[port] = ports[port] ?? [];
+    ports[port].push(packageName);
+  }
 
   return { entries, ports };
 }

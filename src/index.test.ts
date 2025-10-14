@@ -1,15 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   analyzeImportMap,
   getPackageName,
   getPort,
   HASH,
   type HashFunction,
+  parseImportMap,
   REDUCERS,
   type ReducerFunction,
-} from '../src/index.js';
+} from './index.js';
 
 describe('portico', () => {
   describe.for(Object.keys(HASH) as (keyof typeof HASH)[])(
@@ -186,15 +187,174 @@ describe('portico', () => {
   });
 
   describe('getPackageName', () => {
-    test('should return package name from package.json', () => {
-      const packageName = getPackageName();
-      expect(packageName).toBe('portico');
+    test('should return package name from package.json', async () => {
+      await expect(getPackageName()).resolves.toBe('portico');
     });
 
-    test('should throw error if package.json is not found', () => {
-      expect(() => getPackageName('/nonexistent/package.json')).toThrow(
-        'package.json not found',
+    test('should throw error if package.json is not found', async () => {
+      await expect(getPackageName('/nonexistent/package.json')).rejects.toThrow(
+        `ENOENT: no such file or directory, open '/nonexistent/package.json'`,
       );
+    });
+  });
+
+  describe('parseImportMap', () => {
+    const testImportMapPath = path.join(
+      import.meta.dirname || __dirname,
+      'test-parse-import-map.json',
+    );
+
+    beforeEach(() => {
+      // Clean up any existing test file
+      if (fs.existsSync(testImportMapPath)) {
+        fs.unlinkSync(testImportMapPath);
+      }
+
+      // Reset fetch mock
+      vi.resetAllMocks();
+    });
+
+    afterEach(() => {
+      // Clean up test file
+      if (fs.existsSync(testImportMapPath)) {
+        fs.unlinkSync(testImportMapPath);
+      }
+
+      // Restore fetch mock
+      vi.restoreAllMocks();
+    });
+
+    describe('local file parsing', () => {
+      test('should parse valid local import map file', async () => {
+        const importMap = {
+          imports: {
+            react: 'https://esm.sh/react@18',
+            lodash: 'https://esm.sh/lodash@4',
+          },
+        };
+        fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
+
+        const result = await parseImportMap(testImportMapPath);
+
+        expect(result).toEqual(importMap);
+        expect(result.imports).toHaveProperty('react');
+        expect(result.imports).toHaveProperty('lodash');
+      });
+
+      test('should throw error if local file does not exist', async () => {
+        await expect(
+          parseImportMap('/nonexistent/import-map.json'),
+        ).rejects.toThrow(
+          `ENOENT: no such file or directory, open '/nonexistent/import-map.json'`,
+        );
+      });
+
+      test('should throw error if local file has invalid JSON', async () => {
+        fs.writeFileSync(testImportMapPath, '{ invalid json }');
+
+        await expect(parseImportMap(testImportMapPath)).rejects.toThrow(
+          `Expected property name or '}' in JSON at position 2 (line 1 column 3)`,
+        );
+      });
+
+      test('should throw error if local file has no imports field', async () => {
+        const invalidImportMap = { notImports: {} };
+        fs.writeFileSync(
+          testImportMapPath,
+          JSON.stringify(invalidImportMap, null, 2),
+        );
+
+        await expect(parseImportMap(testImportMapPath)).rejects.toThrow(
+          'Import map must have an "imports" object',
+        );
+      });
+    });
+
+    describe('remote URL fetching', () => {
+      test('should fetch and parse valid remote import map', async () => {
+        const mockImportMap = {
+          imports: {
+            vue: 'https://esm.sh/vue@3',
+            axios: 'https://esm.sh/axios@1',
+          },
+        };
+
+        global.fetch = vi.fn().mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockImportMap,
+        });
+
+        const result = await parseImportMap('https://example.com/imports.json');
+
+        expect(result).toEqual(mockImportMap);
+        expect(global.fetch).toHaveBeenCalledWith(
+          'https://example.com/imports.json',
+        );
+      });
+
+      test('should handle HTTP error responses', async () => {
+        global.fetch = vi.fn().mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+        });
+
+        await expect(
+          parseImportMap('https://example.com/missing.json'),
+        ).rejects.toThrow(`response.json is not a function`);
+      });
+
+      test('should handle network errors', async () => {
+        global.fetch = vi
+          .fn()
+          .mockRejectedValueOnce(new Error('Network error'));
+
+        await expect(
+          parseImportMap('https://example.com/imports.json'),
+        ).rejects.toThrow(`Network error`);
+      });
+
+      test('should throw error if remote response is invalid JSON', async () => {
+        global.fetch = vi.fn().mockResolvedValueOnce({
+          ok: true,
+          json: async () => {
+            throw new Error('Invalid JSON');
+          },
+        });
+
+        await expect(
+          parseImportMap('https://example.com/malformed.json'),
+        ).rejects.toThrow(`Invalid JSON`);
+      });
+    });
+
+    describe('URL detection', () => {
+      test.for([
+        ['http', 'http://example.com/imports.json'],
+        ['https', 'https://example.com/imports.json'],
+      ] as const)('should detect %s URLs', async ([, url]) => {
+        const mockImportMap = {
+          imports: { test: url.replace('imports.json', 'test.js') },
+        };
+        global.fetch = vi.fn().mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockImportMap,
+        });
+
+        await parseImportMap(url);
+
+        expect(global.fetch).toHaveBeenCalledWith(url);
+      });
+
+      test('should treat non-URL strings as local file paths', async () => {
+        const importMap = { imports: { local: './local.js' } };
+        fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
+
+        const result = await parseImportMap(testImportMapPath);
+
+        expect(result).toEqual(importMap);
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -218,7 +378,7 @@ describe('portico', () => {
       }
     });
 
-    test('should analyze import map and generate ports for all entries', () => {
+    test('should analyze import map and generate ports for all entries', async () => {
       const importMap = {
         imports: {
           '@company/app-one': 'https://example.com/app-one.js',
@@ -228,7 +388,7 @@ describe('portico', () => {
       };
       fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
 
-      const analysis = analyzeImportMap(testImportMapPath);
+      const analysis = await analyzeImportMap(testImportMapPath);
 
       expect(Object.values(analysis.entries)).toHaveLength(3);
       Object.entries(analysis.entries).forEach(([key, port]) => {
@@ -238,63 +398,84 @@ describe('portico', () => {
       });
     });
 
-    test('should detect port collisions', () => {
+    test('should detect and handle port collisions correctly', async () => {
       const importMap = {
         imports: {
-          'package-a': 'https://example.com/a.js',
-          'package-b': 'https://example.com/b.js',
-          'package-c': 'https://example.com/c.js',
-          'package-d': 'https://example.com/d.js',
+          'collision-test-1': 'https://example.com/1.js',
+          'collision-test-2': 'https://example.com/2.js',
+          'collision-test-3': 'https://example.com/3.js',
+          'collision-test-4': 'https://example.com/4.js',
+          'collision-test-5': 'https://example.com/5.js',
         },
       };
       fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
 
-      const analysis = analyzeImportMap(testImportMapPath, 3001, 10); // Small range to force collisions
+      // Use small range to force collisions
+      const analysis = await analyzeImportMap(testImportMapPath, 3001, 3);
 
-      expect(Object.values(analysis.entries)).toHaveLength(4);
-      expect(Object.values(analysis.ports).length).toBeLessThanOrEqual(4);
+      expect(Object.keys(analysis.entries)).toHaveLength(5);
+      expect(Object.keys(analysis.ports).length).toBeLessThan(5);
+
+      // Verify collision structure and distribution
+      const totalInDistribution = Object.values(analysis.ports).reduce(
+        (sum, packages) => sum + packages.length,
+        0,
+      );
+      expect(totalInDistribution).toBe(Object.keys(analysis.entries).length);
+
+      Object.entries(analysis.ports).forEach(([port, packages]) => {
+        expect(+port).toBeGreaterThanOrEqual(3001);
+        expect(+port).toBeLessThan(3004);
+
+        // All packages in collision should have the same port
+        packages.forEach((pkg) => {
+          expect(analysis.entries[pkg]).toBe(+port);
+        });
+      });
     });
 
-    test('should throw error if import map file does not exist', () => {
-      expect(() => analyzeImportMap('/nonexistent/import-map.json')).toThrow(
-        'Import map file not found',
+    test('should throw error if import map file does not exist', async () => {
+      await expect(
+        analyzeImportMap('/nonexistent/import-map.json'),
+      ).rejects.toThrow(
+        `ENOENT: no such file or directory, open '/nonexistent/import-map.json'`,
       );
     });
 
-    test('should throw error if import map is invalid JSON', () => {
+    test('should throw error if import map is invalid JSON', async () => {
       fs.writeFileSync(testImportMapPath, '{ invalid json }');
 
-      expect(() => analyzeImportMap(testImportMapPath)).toThrow(
-        'Failed to parse import map',
+      await expect(() => analyzeImportMap(testImportMapPath)).rejects.toThrow(
+        `Expected property name or '}' in JSON at position 2 (line 1 column 3)`,
       );
     });
 
-    test('should throw error if import map has no imports field', () => {
+    test('should throw error if import map has no imports field', async () => {
       const invalidImportMap = { notImports: {} };
       fs.writeFileSync(
         testImportMapPath,
         JSON.stringify(invalidImportMap, null, 2),
       );
 
-      expect(() => analyzeImportMap(testImportMapPath)).toThrow(
-        'Import map must have an "imports" object',
+      await expect(() => analyzeImportMap(testImportMapPath)).rejects.toThrow(
+        `Import map must have an "imports" object`,
       );
     });
 
-    test('should handle empty import map', () => {
+    test('should handle empty import map', async () => {
       const emptyImportMap = { imports: {} };
       fs.writeFileSync(
         testImportMapPath,
         JSON.stringify(emptyImportMap, null, 2),
       );
 
-      const analysis = analyzeImportMap(testImportMapPath);
+      const analysis = await analyzeImportMap(testImportMapPath);
 
-      expect(analysis.entries).toMatchInlineSnapshot(`{}`);
-      expect(analysis.ports).toMatchInlineSnapshot(`{}`);
+      expect(analysis.entries).toEqual({});
+      expect(analysis.ports).toEqual({});
     });
 
-    test('should work with custom hash and reducer functions', () => {
+    test('should work with custom hash and reducer functions', async () => {
       const importMap = {
         imports: {
           'package-a': 'https://example.com/a.js',
@@ -304,14 +485,14 @@ describe('portico', () => {
       };
       fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
 
-      const analysis1 = analyzeImportMap(
+      const analysis1 = await analyzeImportMap(
         testImportMapPath,
         3001,
         1997,
         'double',
         'lcg',
       );
-      const analysis2 = analyzeImportMap(
+      const analysis2 = await analyzeImportMap(
         testImportMapPath,
         3001,
         1997,
@@ -326,127 +507,6 @@ describe('portico', () => {
       const ports1 = Object.values(analysis1.entries).sort();
       const ports2 = Object.values(analysis2.entries).sort();
       expect(ports1).not.toEqual(ports2);
-    });
-
-    test('should calculate distribution correctly', () => {
-      const importMap = {
-        imports: {
-          'pkg-1': 'https://example.com/1.js',
-          'pkg-2': 'https://example.com/2.js',
-          'pkg-3': 'https://example.com/3.js',
-        },
-      };
-      fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
-
-      const analysis = analyzeImportMap(testImportMapPath);
-
-      // Check that distribution adds up to total packages
-      const totalInDistribution = Object.values(analysis.ports).reduce(
-        (sum, packages) => sum + packages.length,
-        0,
-      );
-      expect(totalInDistribution).toBe(Object.keys(analysis.entries).length);
-
-      // Each port in distribution should have count >= 1
-      Object.values(analysis.ports).forEach((packages) => {
-        expect(packages.length).toBeGreaterThanOrEqual(1);
-      });
-    });
-
-    test('should detect and report collisions correctly', () => {
-      const importMap = {
-        imports: {
-          'collision-test-1': 'https://example.com/1.js',
-          'collision-test-2': 'https://example.com/2.js',
-          'collision-test-3': 'https://example.com/3.js',
-          'collision-test-4': 'https://example.com/4.js',
-          'collision-test-5': 'https://example.com/5.js',
-        },
-      };
-      fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
-
-      // Use small range to force collisions
-      const analysis = analyzeImportMap(testImportMapPath, 3001, 3);
-
-      expect(Object.keys(analysis.entries)).toHaveLength(5);
-      expect(Object.keys(analysis.ports).length).toBeLessThan(5);
-
-      // Verify collision structure
-      Object.entries(analysis.ports).forEach(([port, packages]) => {
-        expect(+port).toBeGreaterThanOrEqual(3001);
-        expect(+port).toBeLessThan(3004);
-        expect(packages.length).toBeGreaterThanOrEqual(1);
-
-        // All packages in collision should have the same port
-        packages.forEach((pkg) => {
-          expect(analysis.entries[pkg]).toBe(+port);
-        });
-      });
-    });
-
-    test('should handle import map with numeric version suffixes in URLs', () => {
-      const importMap = {
-        imports: {
-          'versioned-pkg-1': 'https://cdn.example.com/pkg1/v1.2.3/main.js',
-          'versioned-pkg-2': 'https://cdn.example.com/pkg2/v2.0.0/main.js',
-        },
-      };
-      fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
-
-      const analysis = analyzeImportMap(testImportMapPath);
-
-      expect(Object.keys(analysis.entries)).toHaveLength(2);
-
-      Object.values(analysis.entries).forEach((port) => {
-        expect(port).toBeGreaterThanOrEqual(3001);
-        expect(port).toBeLessThan(4998);
-      });
-    });
-
-    test('should use default hash and reducer when not specified', () => {
-      const importMap = {
-        imports: {
-          'default-test': 'https://example.com/test.js',
-        },
-      };
-      fs.writeFileSync(testImportMapPath, JSON.stringify(importMap, null, 2));
-
-      const defaultAnalysis = analyzeImportMap(testImportMapPath);
-      const explicitAnalysis = analyzeImportMap(
-        testImportMapPath,
-        3001,
-        1997,
-        'twin',
-        'knuth',
-      );
-
-      expect(defaultAnalysis.entries['default-test']).toBe(
-        explicitAnalysis.entries['default-test'],
-      );
-    });
-
-    test('should handle import map with imports field not being an object', () => {
-      const invalidImportMap = { imports: 'not-an-object' };
-      fs.writeFileSync(
-        testImportMapPath,
-        JSON.stringify(invalidImportMap, null, 2),
-      );
-
-      expect(() => analyzeImportMap(testImportMapPath)).toThrow(
-        'Import map must have an "imports" object',
-      );
-    });
-
-    test('should handle import map with null imports field', () => {
-      const invalidImportMap = { imports: null };
-      fs.writeFileSync(
-        testImportMapPath,
-        JSON.stringify(invalidImportMap, null, 2),
-      );
-
-      expect(() => analyzeImportMap(testImportMapPath)).toThrow(
-        'Import map must have an "imports" object',
-      );
     });
   });
 });

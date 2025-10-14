@@ -17,8 +17,6 @@ const program = new Command();
 // Available options
 const HASH_NAMES = Object.keys(HASH) as HashFunction[];
 const REDUCER_NAMES = Object.keys(REDUCERS) as ReducerFunction[];
-const HASH_LIST_STRING = HASH_NAMES.join(', ');
-const REDUCER_LIST_STRING = REDUCER_NAMES.join(', ');
 
 // Helper functions to reduce duplication
 function createBasePortOption() {
@@ -28,7 +26,7 @@ function createBasePortOption() {
     .argParser((value) => {
       const parsed = parseInt(value, 10);
       if (
-        isNaN(parsed) ||
+        Number.isNaN(parsed) ||
         typeof parsed !== 'number' ||
         parsed < 1 ||
         parsed > 65535
@@ -46,7 +44,7 @@ function createRangeOption() {
     .env('PORTICO_RANGE')
     .argParser((value) => {
       const parsed = parseInt(value, 10);
-      if (isNaN(parsed) || typeof parsed !== 'number' || parsed < 1) {
+      if (Number.isNaN(parsed) || typeof parsed !== 'number' || parsed < 1) {
         throw new Error('Range must be a positive number');
       }
       return parsed;
@@ -54,24 +52,22 @@ function createRangeOption() {
 }
 
 function createHashOption() {
-  return new Option('--hash <type>', `Hash function: ${HASH_LIST_STRING}`)
+  return new Option('--hash <type>', `Hash function`)
     .default('twin')
     .choices(HASH_NAMES)
     .env('PORTICO_HASH');
 }
 
 function createReducerOption() {
-  return new Option(
-    '--reducer <type>',
-    `Reducer function: ${REDUCER_LIST_STRING}`,
-  )
+  return new Option('--reducer <type>', `Reducer function`)
     .default('knuth')
     .choices(REDUCER_NAMES)
     .env('PORTICO_REDUCER');
 }
 
 function parsePortOptions(options: any): { basePort: number; range: number } {
-  const { basePort, range } = options;
+  const basePort = options.base;
+  const range = options.range;
   if (basePort + range > 65535) {
     console.error(
       'Error: Base port + range exceeds maximum port number (65535)',
@@ -146,12 +142,12 @@ Examples:
   $ portico --base 4000 -n my-app        # Custom base port
   $ portico --hash sdbm -n my-app        # Different hash algorithm${createEnvironmentVariablesHelpText()}`,
   )
-  .action((options) => {
+  .action(async (options) => {
     try {
       const { basePort, range } = parsePortOptions(options);
       const hash = options.hash as HashFunction;
       const reducer = options.reducer as ReducerFunction;
-      const name = options.name ?? getPackageName(options.package);
+      const name = options.name ?? (await getPackageName(options.package));
       const port = getPort(name, basePort, range, hash, reducer);
 
       // Verbose output if requested
@@ -178,7 +174,10 @@ program
   .addOption(createRangeOption())
   .addOption(createHashOption())
   .addOption(createReducerOption())
-  .requiredOption('-i, --import-map <path>', 'Path to import map JSON file')
+  .requiredOption(
+    '-i, --import-map <path>',
+    'Path to import map JSON file or URL',
+  )
   .addOption(
     new Option('-o, --output <format>', 'Output format')
       .default('table')
@@ -189,17 +188,18 @@ program
     `
 
 Examples:
-  $ portico analyze -i imports.json              # Analyze with table output
-  $ portico a -i imports.json -o json            # JSON output (shorthand)
-  $ portico analyze -i imports.json -o csv       # CSV output${createEnvironmentVariablesHelpText()}`,
+  $ portico analyze -i imports.json                          # Local file
+  $ portico analyze -i https://example.com/imports.json      # Remote URL
+  $ portico a -i imports.json -o json                        # JSON output (shorthand)
+  $ portico analyze -i imports.json -o csv                   # CSV output${createEnvironmentVariablesHelpText()}`,
   )
-  .action((options) => {
+  .action(async (options) => {
     try {
       const { basePort, range } = parsePortOptions(options);
       const hash = options.hash as HashFunction;
       const reducer = options.reducer as ReducerFunction;
 
-      const analysis = analyzeImportMap(
+      const analysis = await analyzeImportMap(
         options.importMap,
         basePort,
         range,
@@ -236,10 +236,14 @@ Examples:
           console.log('\n📊 Import Map Port Analysis\n');
           console.log(`Strategy: ${hash}+${reducer}`);
           console.log(
-            `Generating ${packageCount} ports in range ${basePort} - ${basePort + range - 1}`,
+            `Generating ${packageCount} ports in range ${basePort} - ${
+              basePort + range - 1
+            }`,
           );
           console.log(
-            `Collision Probability: ${(collisionProbability * 100).toFixed(2)}%\n`,
+            `Collision Probability: ${(collisionProbability * 100).toFixed(
+              2,
+            )}%\n`,
           );
 
           if (uniquePortCount < packageCount) {
@@ -279,17 +283,21 @@ program
       .default('table')
       .choices(['table', 'json']),
   )
-  .requiredOption('-i, --import-map <path>', 'Path to import map JSON file')
+  .requiredOption(
+    '-i, --import-map <path>',
+    'Path to import map JSON file or URL',
+  )
   .addHelpText(
     'after',
     `
 
 Examples:
-  $ portico benchmark -i imports.json           # Compare all strategies
-  $ portico b -i imports.json -o json          # JSON output (shorthand)
-  $ portico benchmark -i imports.json --base 4000  # Custom base port${createEnvironmentVariablesHelpText()}`,
+  $ portico benchmark -i imports.json                     # Local file
+  $ portico benchmark -i https://example.com/imports.json # Remote URL
+  $ portico b -i imports.json -o json                     # JSON output (shorthand)
+  $ portico benchmark -i imports.json --base 4000         # Custom base port${createEnvironmentVariablesHelpText()}`,
   )
-  .action((options) => {
+  .action(async (options) => {
     try {
       const { basePort, range } = parsePortOptions(options);
 
@@ -300,7 +308,7 @@ Examples:
         uniquePorts: number;
       }
 
-      const importMap = parseImportMap(options.importMap);
+      const importMap = await parseImportMap(options.importMap);
 
       const packageCount = Object.keys(importMap.imports).length;
       const probability =
@@ -312,7 +320,7 @@ Examples:
       for (const hash of HASH_NAMES) {
         for (const reducer of REDUCER_NAMES) {
           try {
-            const analysis = analyzeImportMap(
+            const analysis = await analyzeImportMap(
               importMap,
               basePort,
               range,
