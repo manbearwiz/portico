@@ -11,7 +11,13 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: ['commander', 'node:crypto', 'node:fs', 'node:path'],
+      external: [
+        'commander',
+        'node:crypto',
+        'node:fs',
+        'node:fs/promises',
+        'node:path',
+      ],
       output: [
         {
           format: 'es',
