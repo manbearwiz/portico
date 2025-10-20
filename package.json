@@ -71,7 +71,7 @@
     "happy-dom": "^20.0.0",
     "lefthook": "^1.12.3",
     "publint": "^0.3.12",
-    "semantic-release": "^24.2.7",
+    "semantic-release": "^25.0.1",
     "typescript": "^5.9.2",
     "vite": "^7.1.2",
     "vitest": "^3.2.4",
