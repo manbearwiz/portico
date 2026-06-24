@@ -78,7 +78,7 @@
     "vitest-tiny-reporter": "^1.2.0"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^14.0.0",
+    "@commander-js/extra-typings": "^15.0.0",
     "commander": "^14.0.0"
   }
 }
